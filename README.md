@@ -2,7 +2,7 @@
 
 [![GitHub Release](https://img.shields.io/github/v/release/captainluzik/oh-my-embedded?style=flat-square&label=release&color=369eff&labelColor=black)](https://github.com/captainluzik/oh-my-embedded/releases)
 [![npm downloads](https://img.shields.io/npm/dm/oh-my-embedded?style=flat-square&label=downloads&color=ff6b35&labelColor=black)](https://www.npmjs.com/package/oh-my-embedded)
-[![GitHub Contributors](https://img.shields.io/github/contributors/captainluzik/oh-my-embedded?style=flat-square&label=contributors&color=c4f042&labelColor=black)](https://github.com/captainluzik/oh-my-embedded/graphs/contributors)
+[![GitHub Contributors](https://img.shields.io/github/contributors/stefanbetz/oh-my-embedded-v2?style=flat-square&label=contributors&color=c4f042&labelColor=black)](https://github.com/stefanbetz/oh-my-embedded-v2/graphs/contributors)
 [![GitHub Stars](https://img.shields.io/github/stars/captainluzik/oh-my-embedded?style=flat-square&label=stars&color=ffcb47&labelColor=black)](https://github.com/captainluzik/oh-my-embedded/stargazers)
 [![GitHub Issues](https://img.shields.io/github/issues/captainluzik/oh-my-embedded?style=flat-square&label=issues&color=ff80eb&labelColor=black)](https://github.com/captainluzik/oh-my-embedded/issues)
 [![License MIT](https://img.shields.io/badge/license-MIT-white?style=flat-square&labelColor=black)](LICENSE)

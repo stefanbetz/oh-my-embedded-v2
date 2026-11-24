@@ -1,15 +1,6 @@
-import { existsSync } from "fs"
-import { join } from "path"
-import { readFile } from "fs/promises"
-
-type ToolExecuteBeforeInput = {
-  tool: string
-  args: Record<string, unknown>
-}
-
-type ToolExecuteBeforeOutput = {
-  args: Record<string, unknown>
-}
+import { existsSync } from "node:fs"
+import { readFile } from "node:fs/promises"
+import { join } from "node:path"
 
 interface SdkConfig {
   target?: string
@@ -28,15 +19,13 @@ async function parseSdkConfig(directory: string): Promise<SdkConfig | null> {
 
   try {
     const content = await readFile(sdkconfigPath, "utf-8")
-    const lines = content.split("\n")
     const config: SdkConfig = {}
 
-    for (const line of lines) {
+    for (const line of content.split("\n")) {
       const trimmed = line.trim()
       if (trimmed.startsWith("#") || !trimmed.includes("=")) continue
 
       const [key, value] = trimmed.split("=", 2)
-
       switch (key) {
         case "CONFIG_IDF_TARGET":
           config.target = value.replace(/"/g, "")
@@ -61,7 +50,7 @@ async function parseSdkConfig(directory: string): Promise<SdkConfig | null> {
           config.partitionTable = value.replace(/"/g, "")
           break
         case "CONFIG_FREERTOS_HZ":
-          config.freertosHz = parseInt(value, 10)
+          config.freertosHz = Number.parseInt(value, 10)
           break
       }
     }
@@ -72,44 +61,34 @@ async function parseSdkConfig(directory: string): Promise<SdkConfig | null> {
   }
 }
 
-async function parsePartitionTable(
-  directory: string,
-  filename?: string
-): Promise<string | null> {
+async function parsePartitionTable(directory: string, filename?: string): Promise<string | null> {
   const csvPath = join(directory, filename ?? "partitions.csv")
   if (!existsSync(csvPath)) return null
 
   try {
-    const content = await readFile(csvPath, "utf-8")
-    return content
+    return await readFile(csvPath, "utf-8")
   } catch {
     return null
   }
 }
 
-export function createEspIdfContextHook(ctx: { directory: string }) {
-  let sdkConfig: SdkConfig | null = null
-  let contextInjected = false
+/**
+ * Parses `sdkconfig` once and returns system-prompt parts for V2's
+ * `ctx.session.hook("context", ...)`. The V1 implementation prepared these
+ * parts but never injected them; V2 makes that possible.
+ */
+export function createEspIdfContextHook(directory: string) {
+  let loaded = false
+  let parts: string[] | null = null
 
-  return {
-    async beforeToolExecute(
-      _input: ToolExecuteBeforeInput,
-      _output: ToolExecuteBeforeOutput
-    ) {
-      if (contextInjected) return
+  async function getContext(): Promise<string[] | null> {
+    if (!loaded) {
+      loaded = true
+      const sdkConfig = await parseSdkConfig(directory)
+      if (!sdkConfig) return null
 
-      const sdkconfigPath = join(ctx.directory, "sdkconfig")
-      if (!existsSync(sdkconfigPath)) return
-
-      sdkConfig = await parseSdkConfig(ctx.directory)
-      if (!sdkConfig) return
-
-      const partitions = await parsePartitionTable(
-        ctx.directory,
-        sdkConfig.partitionTable
-      )
-
-      const contextParts: string[] = [
+      const partitions = await parsePartitionTable(directory, sdkConfig.partitionTable)
+      const result: string[] = [
         "## ESP-IDF Project Context (auto-detected by oh-my-embedded)",
         "",
         `- **Target**: ${sdkConfig.target ?? "unknown"}`,
@@ -122,24 +101,24 @@ export function createEspIdfContextHook(ctx: { directory: string }) {
       ]
 
       if (partitions) {
-        contextParts.push("", "### Partition Table", "```", partitions.trim(), "```")
+        result.push("", "### Partition Table", "```", partitions.trim(), "```")
       }
 
       if (sdkConfig.wifiEnabled && sdkConfig.target === "esp32") {
-        contextParts.push(
+        result.push(
           "",
           "### Important: ADC2 + WiFi Conflict",
           "ADC2 channels (GPIO 0,2,4,12-15,25-27) **cannot be used while WiFi is active**.",
-          "Use ADC1 channels (GPIO 32-39) for analog reads in WiFi projects."
+          "Use ADC1 channels (GPIO 32-39) for analog reads in WiFi projects.",
         )
       }
 
       console.error(`[oh-my-embedded] ESP-IDF context: ${sdkConfig.target}, flash=${sdkConfig.flashSize}`)
-      contextInjected = true
-    },
+      parts = result
+    }
 
-    getSdkConfig(): SdkConfig | null {
-      return sdkConfig
-    },
+    return parts
   }
+
+  return { getContext }
 }

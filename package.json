@@ -1,10 +1,13 @@
 {
   "name": "oh-my-embedded",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Embedded systems engineering plugin for OpenCode. ESP32, FreeRTOS, RF design, PCB layout, component sourcing, power budgets — all from your terminal.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js"
+  },
   "bin": {
     "oh-my-embedded": "dist/cli/install.js"
   },
@@ -55,7 +58,8 @@
   },
   "homepage": "https://github.com/captainluzik/oh-my-embedded#readme",
   "dependencies": {
-    "@opencode-ai/plugin": "^1.1.53"
+    "@opencode/plugin": "2.3.2",
+    "zod": "^4"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.0",

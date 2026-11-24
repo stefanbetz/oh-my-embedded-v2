@@ -1,4 +1,4 @@
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "./v2-adapter"
 
 // E24 series standard resistor values (multiplied by decades)
 const E24_BASE = [

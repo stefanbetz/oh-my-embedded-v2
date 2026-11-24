@@ -1,4 +1,4 @@
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "./v2-adapter"
 
 interface ICProfile {
   name: string

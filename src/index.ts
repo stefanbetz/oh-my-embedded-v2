@@ -1,74 +1,75 @@
+import { spawnSync } from "node:child_process"
 import { existsSync } from "node:fs"
 import { dirname, join } from "node:path"
-import type { Plugin } from "@opencode-ai/plugin"
-import type { Config } from "@opencode-ai/sdk"
+import { Mcp, Plugin } from "@opencode/plugin"
 import { createAutoDetectHook } from "./hooks/auto-detect"
 import { createEspIdfContextHook } from "./hooks/esp-idf-context"
 import { createTools } from "./tools/index"
 
 const HOME = process.env.HOME ?? process.env.USERPROFILE ?? "~"
 const MCP_DIR = join(HOME, ".local", "share", "oh-my-embedded")
+// This machine has no `node` on PATH, but bun is available and runs the MCP bundles.
+const JS_RUNTIME = join(HOME, ".bun", "bin", "bun")
 
-function mcpLocal(
-  command: string[],
-  env?: Record<string, string>,
-): {
-  type: "local"
-  command: string[]
-  environment?: Record<string, string>
-  enabled: boolean
-  timeout: number
-} {
-  return { type: "local", command, environment: env, enabled: true, timeout: 30_000 } as const
+interface McpEditor {
+  set(name: string, config: Mcp.ServerConfig): void
 }
 
-function registerMcpServers(config: Config) {
-  if (!config.mcp) config.mcp = {}
+function mcpLocal(command: string[], env?: Record<string, string>): Mcp.ServerConfig {
+  return {
+    type: "local",
+    command,
+    ...(env ? { environment: env } : {}),
+    disabled: false,
+    timeout: { startup: 30_000, catalog: 30_000, execution: 30_000 },
+  }
+}
 
+function registerMcpServers(editor: McpEditor) {
   const espMcpDir = join(MCP_DIR, "esp-mcp")
   if (existsSync(espMcpDir)) {
-    config.mcp["esp-mcp"] = mcpLocal([
-      "uv",
-      "run",
-      "--directory",
-      espMcpDir,
-      "--python",
-      "3.11",
-      "python",
-      "main.py",
-    ])
+    editor.set(
+      "esp-mcp",
+      mcpLocal([
+        "uv",
+        "run",
+        "--directory",
+        espMcpDir,
+        "--python",
+        "3.11",
+        "python",
+        "main.py",
+      ]),
+    )
   }
 
   const kicadEntry = join(MCP_DIR, "kicad-mcp-server", "dist", "index.js")
   const kicadPythonPath = existsSync(kicadEntry) ? findKicadPythonPath() : undefined
-  if (kicadEntry && kicadPythonPath) {
-    config.mcp["kicad-mcp"] = mcpLocal(["node", kicadEntry], {
-      PYTHONPATH: kicadPythonPath,
-    })
+  if (kicadPythonPath) {
+    editor.set("kicad-mcp", mcpLocal([JS_RUNTIME, kicadEntry], { PYTHONPATH: kicadPythonPath }))
   }
 
   const jlcMcpEntry = join(MCP_DIR, "jlc-cli", "packages", "mcp", "dist", "index.js")
   if (existsSync(jlcMcpEntry)) {
-    config.mcp["jlcpcb-mcp"] = mcpLocal(["node", jlcMcpEntry])
+    editor.set("jlcpcb-mcp", mcpLocal([JS_RUNTIME, jlcMcpEntry]))
   }
 
   if (commandExistsSync("uvx")) {
-    config.mcp.spicebridge = mcpLocal(["uvx", "spicebridge"])
+    editor.set("spicebridge", mcpLocal(["uvx", "spicebridge"]))
   }
 
   if (commandExistsSync("mcp-server-gdb")) {
-    config.mcp["mcp-server-gdb"] = mcpLocal(["mcp-server-gdb"])
+    editor.set("mcp-server-gdb", mcpLocal(["mcp-server-gdb"]))
   }
 
   if (commandExistsSync("serial-mcp-server")) {
-    config.mcp["serial-mcp-server"] = mcpLocal(["serial-mcp-server"])
+    editor.set("serial-mcp-server", mcpLocal(["serial-mcp-server"]))
   }
 }
 
 function commandExistsSync(cmd: string): boolean {
   try {
-    const result = Bun.spawnSync(["which", cmd], { stdout: "pipe", stderr: "pipe" })
-    return result.exitCode === 0
+    return spawnSync("which", [cmd], { stdio: "pipe" }).status === 0
   } catch {
     return false
   }
@@ -86,42 +87,52 @@ function findKicadPythonPath(): string | undefined {
   }
 
   try {
-    const result = Bun.spawnSync(["python3", "-c", "import pcbnew; print(pcbnew.__file__)"], {
-      stdout: "pipe",
-      stderr: "pipe",
+    const result = spawnSync("python3", ["-c", "import pcbnew; print(pcbnew.__file__)"], {
+      encoding: "utf-8",
     })
-    if (result.exitCode === 0) {
-      const out = new TextDecoder().decode(result.stdout).trim()
-      if (out) return dirname(out)
-    }
+    const stdout = result.stdout?.trim()
+    if (result.status === 0 && stdout) return dirname(stdout)
   } catch {}
 
   return undefined
 }
 
-const OhMyEmbedded: Plugin = async (ctx) => {
-  const tools = createTools()
-  const autoDetect = createAutoDetectHook(ctx)
-  const espIdfContext = createEspIdfContextHook(ctx)
+const OhMyEmbedded = Plugin.define({
+  id: "oh-my-embedded",
+  async setup(ctx) {
+    const directory = ctx.location.directory
 
-  return {
-    tool: tools,
+    await ctx.tool.transform((editor) => {
+      for (const definition of createTools()) {
+        editor.add(definition as never)
+      }
+    })
 
-    config: async (config: Config) => {
-      registerMcpServers(config)
-    },
+    await ctx.mcp.transform((editor) => {
+      registerMcpServers(editor)
+    })
 
-    "session.created": async ({ event }: { event: unknown }) => {
-      await autoDetect.onSessionCreated(event)
-    },
+    const autoDetect = createAutoDetectHook({ directory })
+    const controller = new AbortController()
+    void (async () => {
+      for await (const event of ctx.event.subscribe({
+        types: ["session.created"],
+        signal: controller.signal,
+      })) {
+        await autoDetect.onSessionCreated(event)
+      }
+    })()
 
-    "tool.execute.before": async (input, output) => {
-      await espIdfContext.beforeToolExecute(
-        { tool: input.tool, args: output.args ?? {} },
-        { args: output.args ?? {} },
-      )
-    },
-  }
-}
+    const espIdfContext = createEspIdfContextHook(directory)
+    await ctx.session.hook("context", async (event) => {
+      const parts = await espIdfContext.getContext()
+      if (parts?.length) {
+        event.system.push({ type: "text", text: parts.join("\n") } as never)
+      }
+    })
+
+    return () => controller.abort()
+  },
+})
 
 export default OhMyEmbedded

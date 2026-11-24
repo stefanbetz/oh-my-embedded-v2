@@ -18,6 +18,9 @@ An [OpenCode](https://opencode.ai) plugin for embedded engineers. It brings spec
 
 Works standalone or alongside [oh-my-opencode](https://github.com/code-yeongyu/oh-my-opencode).
 
+> [!NOTE]
+> This fork ports the plugin to the **OpenCode 2** plugin API (`Plugin.define`, `@opencode/plugin@2.3.2`). Upstream `0.1.1` still targets OpenCode 1 and fails to load in OpenCode 2.
+
 ## Installation
 
 ### For Humans

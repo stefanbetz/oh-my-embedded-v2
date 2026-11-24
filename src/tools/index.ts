@@ -5,11 +5,11 @@ import { pinMapper } from "./pin-mapper"
 import { decouplingAdvisor } from "./decoupling-advisor"
 
 export function createTools() {
-  return {
-    "embedded-power-calculator": powerCalculator,
-    "embedded-impedance-calculator": impedanceCalculator,
-    "embedded-resistor-divider": resistorDivider,
-    "embedded-pin-mapper": pinMapper,
-    "embedded-decoupling-advisor": decouplingAdvisor,
-  }
+  return [
+    { name: "embedded-power-calculator", ...powerCalculator },
+    { name: "embedded-impedance-calculator", ...impedanceCalculator },
+    { name: "embedded-resistor-divider", ...resistorDivider },
+    { name: "embedded-pin-mapper", ...pinMapper },
+    { name: "embedded-decoupling-advisor", ...decouplingAdvisor },
+  ]
 }
